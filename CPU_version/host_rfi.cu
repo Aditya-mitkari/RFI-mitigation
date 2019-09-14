@@ -53,8 +53,8 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 	orig_var /= ( nsamp * nchans );
 	orig_var = sqrt( orig_var );
 
-	printf( "orig_mean %f\n", orig_mean );
-	printf( "orig_var %f\n", orig_var );
+	//printf( "orig_mean %f\n", orig_mean );
+	//printf( "orig_var %f\n", orig_var );
 
 	// Random Vectors
 
@@ -147,12 +147,12 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 				}
       }
 
-			printf( "\nchan_mean %lf\n", chan_mean[ c ] );
-			printf( "\ncounter%u\n", counter );
+			//printf( "\nchan_mean %lf\n", chan_mean[ c ] );
+			//printf( "\ncounter%u\n", counter );
 
 			if( counter == 0 )
 			{
-				printf( "\nCounter zero, Channel %d", c );
+				//printf( "\nCounter zero, Channel %d", c );
 				chan_mask[ c ] = 0;
 				finish = 1;
 				break;
@@ -170,15 +170,15 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 				}
 			}
 
-			printf( "\nchan_var %lf\n", chan_var[c] );
-			printf( "\ncounter %u\n", counter );
+			//printf( "\nchan_var %lf\n", chan_var[c] );
+			//printf( "\ncounter %u\n", counter );
 
 			chan_var[ c ] /= ( counter );
 			chan_var[ c ] = sqrt( chan_var[ c ] );
 
 			if( ( chan_var[ c ] ) * 1000000.0 < 0.1 )
 			{
-				//printf("\nVarience zero, Channel %d %d %lf %.16lf\n", c, rounds, chan_mean[c], chan_var[c] );
+				////printf("\nVarience zero, Channel %d %d %lf %.16lf\n", c, rounds, chan_mean[c], chan_var[c] );
 				chan_mask[ c ] = 0;
 				finish = 1;
 				break;
@@ -198,7 +198,7 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 
 			if( fabs( chan_mean[ c ] - old_mean ) < 0.001 && fabs( chan_var[ c ] - old_var ) < 0.0001 && rounds > 1)
 			{
-				//printf("\n%d\t%d\t%.16lf\t%.16lf\t%.16lf\t%.16lf", c, rounds, (chan_mean[c]-old_mean), (chan_var[c]-old_var), chan_mean[c], chan_var[c]);
+				////printf("\n%d\t%d\t%.16lf\t%.16lf\t%.16lf\t%.16lf", c, rounds, (chan_mean[c]-old_mean), (chan_var[c]-old_var), chan_mean[c], chan_var[c]);
 				finish = 1;
 			}
 
@@ -208,7 +208,7 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 		}
 
 
-		printf( "\nChan mean, var: %lf %lf\n", chan_mean[ c ], chan_var[ c ] );
+		//printf( "\nChan mean, var: %lf %lf\n", chan_mean[ c ], chan_var[ c ] );
 
 
 		if( chan_mask[ c ] != 0 )
@@ -264,12 +264,12 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 				}
       }
 
-			printf( "\nSpectra mean %lf\n", spectra_mean[ t ] );
-			printf( "counter %d\n", counter );
+			//printf( "\nSpectra mean %lf\n", spectra_mean[ t ] );
+			//printf( "counter %d\n", counter );
 
 			if( counter == 0 )
 			{
-				printf( "\nCounter zero, Spectra %d", t );
+				//printf( "\nCounter zero, Spectra %d", t );
 				spectra_mask[ t ] = 0;
 				finish = 1;
 				break;
@@ -288,15 +288,15 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 				}
 			}
 
-			printf( "spectra_var %lf\n", spectra_var[ t ] );
-			printf( "counter %u\n", counter );
+			//printf( "spectra_var %lf\n", spectra_var[ t ] );
+			//printf( "counter %u\n", counter );
 
 			spectra_var[ t ] /= (counter);
 			spectra_var[ t ] = sqrt( spectra_var[ t ] );
 
 			if( ( spectra_var[ t ] ) * 1000000.0 < 0.1 )
 			{
-				//printf("\nVarience zero, Spectra %d %d %lf %.16lf", t, rounds, spectra_mean[t], spectra_var[t] );
+				////printf("\nVarience zero, Spectra %d %d %lf %.16lf", t, rounds, spectra_mean[t], spectra_var[t] );
 				spectra_mask[ t ] = 0;
 				finish = 1;
 				break;
@@ -319,7 +319,7 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 
 			if( fabs( spectra_mean[ t ] - old_mean ) < 0.001 && fabs( spectra_var[ t ] - old_var ) < 0.0001 && rounds > 1)
 			{
-				//printf("\n%d\t%d\t%.16lf\t%.16lf\t%.16lf\t%.16lf", t, rounds, (spectra_mean[t] - old_mean), (spectra_var[t] - old_var), spectra_mean[t], spectra_var[t]);
+				////printf("\n%d\t%d\t%.16lf\t%.16lf\t%.16lf\t%.16lf", t, rounds, (spectra_mean[t] - old_mean), (spectra_var[t] - old_var), spectra_mean[t], spectra_var[t]);
 				finish = 1;
 			}
 
@@ -329,7 +329,7 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 		}
 
 		//return;
-		//printf("Spectra mean, var: %lf %d\n", spectra_mean[t], spectra_var[t] );
+		////printf("Spectra mean, var: %lf %d\n", spectra_mean[t], spectra_var[t] );
 
 		if( spectra_mask[ t ] != 0)
 		{
@@ -353,7 +353,7 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 		}
 	}
 
-	printf( "cnt is %u\n", cnt );
+	//printf( "cnt is %u\n", cnt );
 
 
 	double mean_rescale = 0.0;
@@ -390,7 +390,7 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 			}
 		}
 
-		printf("mm is %lf\n",mean_of_mean );
+		//printf("mm is %lf\n",mean_of_mean );
 
 		mean_of_mean /= counter;
 
@@ -406,8 +406,8 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 			}
 		}
 
-		printf( "\nvar_of_mean %lf\n", var_of_var );
-    printf( "\ncounter %u\n", counter );
+		//printf( "\nvar_of_mean %lf\n", var_of_var );
+    //printf( "\ncounter %u\n", counter );
 
 		var_of_mean /= ( counter );
 		var_of_mean = sqrt( var_of_mean );
@@ -424,8 +424,8 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 			}
 		}
 
-		printf("\nmean_of_var %lf\n",mean_of_var );
-    printf("\ncounter %u\n",counter );
+		//printf("\nmean_of_var %lf\n",mean_of_var );
+    //printf("\ncounter %u\n",counter );
 
 		mean_of_var /= counter;
 
@@ -441,8 +441,8 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 			}
 		}
 
-		printf("\nvar_of_var %lf\n",var_of_var );
-    printf("\ncounter %u\n",counter);
+		//printf("\nvar_of_var %lf\n",var_of_var );
+    //printf("\ncounter %u\n",counter);
 
 		var_of_var /= (counter);
 		var_of_var = sqrt( var_of_var );
@@ -468,8 +468,8 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 		rounds++;
 	}
 
-	printf("\n0 %lf %lf", mean_of_mean, var_of_mean);
-	printf("\n0 %lf %lf", mean_of_var,  var_of_var);
+	//printf("\n0 %lf %lf", mean_of_mean, var_of_mean);
+	//printf("\n0 %lf %lf", mean_of_var,  var_of_var);
 
 	mean_rescale = mean_of_mean;
 	var_rescale  = mean_of_var;
@@ -478,16 +478,16 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 
 	for( int c = 0; c < nchans; c++ ) clipping_constant += chan_mask[ c ];
 	clipping_constant = ( nchans - clipping_constant ) / nchans;
-	printf("\n clipping_constant is %f\n",clipping_constant );
+	//printf("\n clipping_constant is %f\n",clipping_constant );
 	clipping_constant = sqrt( -2.0 * log( clipping_constant * 2.506628275 ) );
-	printf("This This %f\n",clipping_constant );
+	//printf("This This %f\n",clipping_constant );
 
 	// Perform channel replacement
 	for( int c = 0; c < nchans; c++ )
 	{
 		if( fabs( ( chan_mean[ c ] - mean_of_mean ) / var_of_mean ) > clipping_constant && fabs( ( chan_var[ c ] - mean_of_var ) / var_of_var ) > clipping_constant )
 		{
-			//printf("\nReplacing Channel %d %lf %lf", c, chan_mean[c], chan_var[c]);
+			////printf("\nReplacing Channel %d %lf %lf", c, chan_mean[c], chan_var[c]);
 			int perm_one = (int)( ( (float)rand() / (float)RAND_MAX ) * nsamp );
 
 			for( int t = 0; t < (nsamp); t++ )
@@ -591,8 +591,8 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 		rounds++;
 	}
 
-	printf("\n0 %lf %lf", mean_of_mean, var_of_mean);
-	printf("\n0 %lf %lf", mean_of_var,  var_of_var);
+	//printf("\n0 %lf %lf", mean_of_mean, var_of_mean);
+	//printf("\n0 %lf %lf", mean_of_var,  var_of_var);
 
 	clipping_constant = 0.0;
 	for( int t = 0; t < nsamp; t++ ) clipping_constant += spectra_mask[ t ];
@@ -604,7 +604,7 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 	{
 	    if( fabs( ( spectra_mean[ t ] - mean_of_mean ) / var_of_mean ) > clipping_constant && fabs( ( spectra_var[ t ] - mean_of_var ) / var_of_var ) > clipping_constant )
 			{
-				//printf("\nReplacing Spectral %d %lf %lf", t, spectra_mean[t], spectra_var[t]);
+				////printf("\nReplacing Spectral %d %lf %lf", t, spectra_mean[t], spectra_var[t]);
 				int perm_one = (int)( ( (float)rand() / (float)RAND_MAX) * nchans );
 				for( int c = 0; c < nchans; c++ )
 				{
@@ -629,7 +629,7 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 	{
 		for( int t = 0; t < (nsamp) / file_reducer; t++ )
 		{
-			//fprintf(fp_mask, "%d ", (unsigned char)((stage[c * (size_t)nsamp + t]*orig_var)+orig_mean));
+			fprintf(fp_mask, "%d ", (unsigned char)((stage[c * (size_t)nsamp + t]*orig_var)+orig_mean));
 			fprintf( fp_mask, "%d ", (unsigned char)( ( stage[ c * (size_t)nsamp + t] * var_rescale ) + mean_rescale ) );
 		}
 
@@ -637,7 +637,7 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 	}
   fclose(fp_mask);
 
-	printf("\n%lf %lf", mean_rescale / orig_mean, var_rescale / orig_var);
+	//printf("\n%lf %lf", mean_rescale / orig_mean, var_rescale / orig_var);
 
 
 	free(chan_mask);
@@ -651,22 +651,22 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer)
 
 void readInputBuffer(unsigned short *input_buffer, int nsamp, int nchans, char fname[100])
 {
-	printf("in readInputBuffer %s\n", fname );
+	//printf("in readInputBuffer %s\n", fname );
 
 	FILE *fp_inputBuffer = fopen( fname, "r" );
 
 	if( fp_inputBuffer == NULL )
 	{
-		printf("Error opeing file\n" );
+		//printf("Error opeing file\n" );
 		exit(0);
 	}
 
   for( int i=0; i < nsamp * nchans; i++ )
 	{
     fscanf(fp_inputBuffer, "%hu", &input_buffer[ i ] );
-		//printf("%hu  ",input_buffer[i] );
+		////printf("%hu  ",input_buffer[i] );
 	}
-	printf("done reading\n" );
+	//printf("done reading\n" );
 	fclose( fp_inputBuffer );
 }
 
