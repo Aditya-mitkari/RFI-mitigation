@@ -10,8 +10,14 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 #include <sys/time.h>
+
+#if (_OPENACC)
+#include <openacc.h>
+#include <accelmath.h>
+#else
+#include <math.h>
+#endif
 //#include "headers/params.h"
 
 //Multidimensional array class to handle 2D arrays
@@ -123,8 +129,9 @@ void channel_process(int *spectra_mask, Array2D<float> stage, double *chan_mean,
 	{
 		int counter = 0;
 
-    memset(spectra_mask, 1, nsamp*sizeof(int));
-//		for( int t = 0; t < nsamp; t++ ) spectra_mask[ t ] = 1;
+//    memset((void *)spectra_mask, (int)1, (size_t) nsamp*sizeof(int));
+//    printf("From channel mask spectro_mask[0] = %d\n", spectra_mask[0]);
+		for( int t = 0; t < nsamp; t++ ) spectra_mask[ t ] = 1;
 
 		int finish = 0;
 		int rounds = 1;
@@ -145,12 +152,8 @@ void channel_process(int *spectra_mask, Array2D<float> stage, double *chan_mean,
 				}
       }
 
-			//printf( "\nchan_mean %lf\n", chan_mean[ c ] );
-			//printf( "\ncounter%u\n", counter );
-
 			if( counter == 0 )
 			{
-				//printf( "\nCounter zero, Channel %d", c );
 				chan_mask[ c ] = 0;
 				finish = 1;
 				break;
@@ -168,15 +171,11 @@ void channel_process(int *spectra_mask, Array2D<float> stage, double *chan_mean,
 				}
 			}
 
-			//printf( "\nchan_var %lf\n", chan_var[c] );
-			//printf( "\ncounter %u\n", counter );
-
 			chan_var[ c ] /= ( counter );
 			chan_var[ c ] = sqrt( chan_var[ c ] );
 
 			if( ( chan_var[ c ] ) * 1000000.0 < 0.1 )
 			{
-				////printf("\nVarience zero, Channel %d %d %lf %.16lf\n", c, rounds, chan_mean[c], chan_var[c] );
 				chan_mask[ c ] = 0;
 				finish = 1;
 				break;
@@ -244,6 +243,7 @@ void sample_process(int *chan_mask, double *spectra_mean, Array2D<float> stage, 
 	{
 		int counter = 0;
 
+//    memset(chan_mask, 1, nchans*sizeof(int));
 		for( int c = 0; c < nchans; c++ )
 		 chan_mask[ c ]=1;
 
@@ -255,7 +255,7 @@ void sample_process(int *chan_mask, double *spectra_mean, Array2D<float> stage, 
 
 		while( finish == 0 )
 		{
-			cnt += 1;
+			cnt ++;
 			counter = 0;
 			spectra_mean[ t ] = 0.0;
 			for( int c = 0; c < nchans; c++ )
@@ -267,12 +267,8 @@ void sample_process(int *chan_mask, double *spectra_mean, Array2D<float> stage, 
 				}
       }
 
-			//printf( "\nSpectra mean %lf\n", spectra_mean[ t ] );
-			//printf( "counter %d\n", counter );
-
 			if( counter == 0 )
 			{
-				//printf( "\nCounter zero, Spectra %d", t );
 				spectra_mask[ t ] = 0;
 				finish = 1;
 				break;
@@ -282,6 +278,7 @@ void sample_process(int *chan_mask, double *spectra_mean, Array2D<float> stage, 
 
 			counter = 0;
 			spectra_var[ t ] = 0.0;
+
 			for( int c = 0; c < nchans; c++ )
 			{
 				if( chan_mask[ c ] == 1 )
@@ -291,15 +288,11 @@ void sample_process(int *chan_mask, double *spectra_mean, Array2D<float> stage, 
 				}
 			}
 
-			//printf( "spectra_var %lf\n", spectra_var[ t ] );
-			//printf( "counter %u\n", counter );
-
 			spectra_var[ t ] /= (counter);
 			spectra_var[ t ] = sqrt( spectra_var[ t ] );
 
 			if( ( spectra_var[ t ] ) * 1000000.0 < 0.1 )
 			{
-				////printf("\nVarience zero, Spectra %d %d %lf %.16lf", t, rounds, spectra_mean[t], spectra_var[t] );
 				spectra_mask[ t ] = 0;
 				finish = 1;
 				break;
@@ -322,7 +315,6 @@ void sample_process(int *chan_mask, double *spectra_mean, Array2D<float> stage, 
 
 			if( fabs( spectra_mean[ t ] - old_mean ) < 0.001 && fabs( spectra_var[ t ] - old_var ) < 0.0001 && rounds > 1)
 			{
-				////printf("\n%d\t%d\t%.16lf\t%.16lf\t%.16lf\t%.16lf", t, rounds, (spectra_mean[t] - old_mean), (spectra_var[t] - old_var), spectra_mean[t], spectra_var[t]);
 				finish = 1;
 			}
 
@@ -330,9 +322,6 @@ void sample_process(int *chan_mask, double *spectra_mean, Array2D<float> stage, 
 			old_var = spectra_var[ t ];
 			rounds++;
 		}
-
-		//return;
-		////printf("Spectra mean, var: %lf %d\n", spectra_mean[t], spectra_var[t] );
 
 		if( spectra_mask[ t ] != 0)
 		{
@@ -653,11 +642,15 @@ void rfi_debug(int nsamp, int nchans, unsigned short **input_buffer, double& ela
   Array2D<float> stage(nsamp,nchans);
 
 	int *chan_mask = ( int* )malloc( nchans * sizeof( int ) );
-  memset(chan_mask, 1, nchans*sizeof(int));
+//  memset(chan_mask, 1, nchans*sizeof(int));
+  for( int c = 0; c < nchans; c++ )
+   chan_mask[ c ]=1;
 
 	int *spectra_mask = ( int* )malloc( nsamp * sizeof( int ) );
 	for( int t = 0; t < nsamp; t++ ) spectra_mask[ t ] = 1;
-  memset(spectra_mask, 1, nsamp*sizeof(int));
+//  memset(spectra_mask, 1, nsamp*sizeof(int));
+  for( int t = 0; t < nsamp; t++ )
+   spectra_mask[ t ]=1;
 
 	double *chan_mean = ( double* )malloc( nchans * sizeof( double ) );
   memset(chan_mean, 0.0, nchans*sizeof(double));
@@ -1404,6 +1397,12 @@ void readInputBuffer(unsigned short *input_buffer, int nsamp, int nchans, char f
 
 int main()
 {
+
+#if (_OPENACC)
+  printf("Running OpenACC version \n");
+#else
+  printf("Running SEQ version \n");
+#endif
   timeval  startTimer, endTimer,
            startReadTimer, endReadTimer,
            startRFITimer, endRFITimer;

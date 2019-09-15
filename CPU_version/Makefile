@@ -14,9 +14,6 @@ CPP_OBJ = rfi.o
 CUDA_PATH?=$(CUDA_ROOT)
 
 OPENACC=no
-ifeq ($(OPENACC),y)
-	DEFINE += -DUSE_OPENACC
-endif
 
 ifeq ($(PRODUCTION),y)
 	DEFINE += -DPRODUCTION_VERSION
@@ -35,11 +32,17 @@ CXX_CU=nvcc
 # PGI compiler flags
 #====================================================
 CXXFLAGS = -O3 -fast -std=c++11
+
+ifeq ($(OPENACC),y)
+	DEFINE += -DUSE_OPENACC
 CXXFLAGS += -acc
-CXXFLAGS += -ta=tesla:cc70
+CXXFLAGS += -ta=tesla:cc60,managed
+CXXFLAGS += -Minline=rand #-Minfo
 CXXFLAGS += -Mcuda
-LDFLAGS = -acc -Mcuda -ta=tesla:cc70
+LDFLAGS = -acc -Mcuda -ta=tesla:cc60,managed
 CXXFLAGS += -Minfo=accel
+endif
+
 CXXFLAGS += $(DEFINE)
 
 #====================================================
