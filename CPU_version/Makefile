@@ -11,7 +11,6 @@ CPP_OBJ = rfi.o
 #=========================================================
 # CUDA_PATH on summit, should be changed for other machines
 #=========================================================
-CUDA_PATH?=$(CUDA_ROOT)
 
 OPENACC=no
 
@@ -31,15 +30,17 @@ CXX_CU=nvcc
 #====================================================
 # PGI compiler flags
 #====================================================
-CXXFLAGS = -O3 -fast -std=c++11
+CXXFLAGS = -O3 -fast -std=c++11 -lm
 
 ifeq ($(OPENACC),y)
-	DEFINE += -DUSE_OPENACC
 CXXFLAGS += -acc
-CXXFLAGS += -ta=tesla:cc60,managed
+CXXFLAGS += -ta=tesla:cc60,managed,nollvm
 CXXFLAGS += -Minline=rand #-Minfo
-CXXFLAGS += -Mcuda
+CXXFLAGS += -Mcuda -Mcudalib=curand
+CXXFLAGS += -I /usr/local/cuda-10.1/include
+#CXXFLAGS += -Xptxas -rdc=true
 LDFLAGS = -acc -Mcuda -ta=tesla:cc60,managed
+LDFLAGS += -lcurand
 CXXFLAGS += -Minfo=accel
 endif
 
