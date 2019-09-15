@@ -77,6 +77,11 @@ void write_output_file(int nchans, int nsamp, int file_reducer, double orig_mean
 inline void reduce_orig_mean(Array2D<float>& stage, int nsamp, int nchans, double& orig_mean)
 {
   double orig_mean_loc = orig_mean;
+#if(_OPENACC)
+#pragma acc parallel loop gang vector \
+  present(stage) \
+  reduction(+:orig_mean_loc)
+#endif
   for(int t = 0; t < nsamp; ++t)
 	{
     for( int c = 0; c < nchans; c++ )
@@ -93,10 +98,10 @@ void reduce_orig_var(Array2D<float>& stage, int nsamp, int nchans, double orig_m
 {
   double orig_var_loc = orig_var;
   double orig_mean_loc = orig_mean;
-#if (_OPENACC)
-//#pragma acc parallel loop gang vector  \
-//  present(stage[:1]) \
-//  reduction(+:orig_var_loc)
+#if(_OPENACC)
+#pragma acc parallel loop gang vector \
+  present(stage) \
+  reduction(+:orig_mean_loc)
 #endif
   for(int iter = 0; iter < nsamp*N; ++iter)
 	{
@@ -283,39 +288,37 @@ void sample_process(int *chan_mask, double *spectra_mean, Array2D<float>& stage,
     double spectra_var_t = spectra_var[t];
 
 #if(_OPENACC)
-//#pragma acc enter data \
-//      copyin(chan_mask[:nchans], stage, stage.dptr[0:stage.size])
-//
-//#pragma acc parallel loop gang vector \
-//    present(chan_mask)
+#pragma acc parallel loop gang vector \
+    present(chan_mask)
 #endif
 		for( int c = 0; c < nchans; c++ )
 		 chan_mask[ c ]=1;
 
+#pragma acc update self(chan_mask[:nchans])
 		while( finish == false )
 		{
 			spectra_mean_t = 0.0;
 			spectra_var_t  = 0.0;
 
 #if(_OPENACC)
-//#pragma acc parallel loop gang vector\
-//      reduction(+:spectra_mean_t) \
-//      present(stage, chan_mask)
+#pragma acc parallel loop gang vector\
+      reduction(+:spectra_mean_t) \
+      present(stage, chan_mask)
 #endif
 			for( int c = 0; c < nchans; c++ )
 			{
 	        spectra_mean_t += stage(t,c) * chan_mask[c];
       }
-
 #pragma acc serial
       {
         spectra_mean_t /= counter;
       }
 
+
 #if(_OPENACC)
-//#pragma acc parallel loop gang vector\
-//      reduction(+:spectra_var_t) \
-//      present(stage, chan_mask)
+#pragma acc parallel loop gang vector\
+      reduction(+:spectra_var_t) \
+      present(stage, chan_mask)
 #endif
 			for( int c = 0; c < nchans; c++ )
 			{
@@ -331,9 +334,9 @@ void sample_process(int *chan_mask, double *spectra_mean, Array2D<float>& stage,
 
       counter = 0;
 #if(_OPENACC)
-//#pragma acc parallel loop gang vector \
-//      reduction(+:counter) \
-//      present(stage, chan_mask)
+#pragma acc parallel loop gang vector \
+      reduction(+:counter) \
+      present(stage, chan_mask)
 #endif
       for( int c = 0; c < nchans; c++ )
       {
@@ -366,7 +369,9 @@ void sample_process(int *chan_mask, double *spectra_mean, Array2D<float>& stage,
 			rounds++;
 		}
 
-//#pragma acc exit data copyout(chan_mask[:nchans])
+#if(_OPENACC)
+#pragma acc update host(chan_mask[:nchans])
+#endif
 
     spectra_mean[t] = spectra_mean_t;
     spectra_var[t] = spectra_var_t;
@@ -715,6 +720,10 @@ void rfi_debug(int nsamp, int nchans, float **input_buffer, double& elapsedTimer
   //Transpose from input buffer to stage
   transpose_stage_ip(stage, *input_buffer, nsamp, nchans);
 
+#if(_OPENACC)
+#pragma acc enter data copyin(stage[:1], stage.dptr[:stage.size], \
+   chan_mask[:nchans], )
+#endif
   reduce_orig_mean(stage, nsamp, nchans, orig_mean);
 
   //reduce into orig_var

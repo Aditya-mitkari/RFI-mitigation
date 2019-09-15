@@ -34,7 +34,7 @@ CXXFLAGS = -O3 -fast -std=c++11 -lm
 
 ifeq ($(OPENACC),y)
 CXXFLAGS += -acc
-CXXFLAGS += -ta=tesla:cc60,managed,nollvm
+CXXFLAGS += -ta=tesla:cc60,managed
 CXXFLAGS += -Minline=rand #-Minfo
 CXXFLAGS += -Mcuda -Mcudalib=curand
 CXXFLAGS += -I /usr/local/cuda-10.1/include
