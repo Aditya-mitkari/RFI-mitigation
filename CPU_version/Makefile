@@ -34,12 +34,12 @@ CXXFLAGS = -O3 -fast -std=c++11 -lm
 
 ifeq ($(OPENACC),y)
 CXXFLAGS += -acc
-CXXFLAGS += -ta=tesla:cc60,managed
+CXXFLAGS += -ta=tesla:cc60
 CXXFLAGS += -Minline=rand #-Minfo
 CXXFLAGS += -Mcuda -Mcudalib=curand
 CXXFLAGS += -I /usr/local/cuda-10.1/include
 #CXXFLAGS += -Xptxas -rdc=true
-LDFLAGS = -acc -Mcuda -ta=tesla:cc60,managed
+LDFLAGS = -acc -Mcuda -ta=tesla:cc60
 LDFLAGS += -lcurand
 CXXFLAGS += -Minfo=accel
 endif

@@ -28,6 +28,7 @@ template<typename T> class Array2D
 
     Array2D(const Array2D &p)
     {
+      cout << "Array2D copy constructor is called" << endl;
       n1=p.n1; n2=p.n2; size=0;
       dptr=p.dptr;
     }
