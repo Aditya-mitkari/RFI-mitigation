@@ -983,7 +983,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   elapsedTimer = (endTimer.tv_sec - startTimer.tv_sec) + 1e-6 * (endTimer.tv_usec - startTimer.tv_usec);
 
 
-  write_output_file(nchans, nsamp, file_reducer, orig_mean, orig_var, sigma_cut, var_rescale, mean_rescale, stage);
+//  write_output_file(nchans, nsamp, file_reducer, orig_mean, orig_var, sigma_cut, var_rescale, mean_rescale, stage);
 
 
 	free(chan_mask);
