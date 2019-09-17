@@ -908,12 +908,12 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
     input_buffer[0:nsamp*nchans])
 #endif
 
-  nvtxRangePush("transpose");
+//  nvtxRangePush("transpose");
   gettimeofday(&startRoutine, NULL);
   transpose_stage_ip(stage, input_buffer, nsamp, nchans);
   gettimeofday(&endRoutine, NULL);
   double Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
-  nvtxRangePop();
+  //nvtxRangePop();
 
   cout << "Done with transpose_stage with T[secs] = " << Timer << endl;
 
@@ -929,36 +929,36 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   cout << "Done with reduce_var with T[secs] = " << Timer << endl;
 
-  nvtxRangePush("random_chan");
+//  nvtxRangePush("random_chan");
   gettimeofday(&startRoutine, NULL);
   random_chan(random_chan_one, random_chan_two, nsamp);
   gettimeofday(&endRoutine, NULL);
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
-  nvtxRangePop();
+  //nvtxRangePop();
   cout << "Done with random chan with T[secs] = " << Timer << endl;
 
-  nvtxRangePush("random_spectra");
+//  nvtxRangePush("random_spectra");
   gettimeofday(&startRoutine, NULL);
   random_spectra(random_spectra_one, random_spectra_two, nchans);
   gettimeofday(&endRoutine, NULL);
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
-  nvtxRangePop();
+  //nvtxRangePop();
   cout << "Done with random spectra with T[secs] = " << Timer << endl;
 
-  nvtxRangePush("channel_process");
+//  nvtxRangePush("channel_process");
   gettimeofday(&startRoutine, NULL);
   channel_process(spectra_mask, stage, chan_mean, chan_var, nsamp, nchans, random_chan_one, random_chan_two);
   gettimeofday(&endRoutine, NULL);
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
-  nvtxRangePop();
+  //nvtxRangePop();
   cout << "Done with channel process with T[secs] = " << Timer << endl;
 
-  nvtxRangePush("sample_process");
+//  nvtxRangePush("sample_process");
   gettimeofday(&startRoutine, NULL);
   sample_process_V2( spectra_mean, stage, spectra_mask, spectra_var, nsamp, nchans, random_spectra_one, random_spectra_two);
   gettimeofday(&endRoutine, NULL);
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
-  nvtxRangePop();
+  //nvtxRangePop();
   cout << "Done with sample process with T[secs] = " << Timer << endl;
 
 //  free(spectra_mask_t);
@@ -968,14 +968,14 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
 
   double mean_rescale = 0.0, var_rescale = 0.0;
 
-  nvtxRangePush("whileLoop");
+//  nvtxRangePush("whileLoop");
   gettimeofday(&startRoutine, NULL);
   whileLoop_V2(stage, chan_mask, chan_mean, chan_var, nsamp, nchans, mean_rescale, var_rescale,
       random_chan_one, random_chan_two, spectra_mean, spectra_var,
       random_spectra_one, random_spectra_two);
   gettimeofday(&endRoutine, NULL);
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
-  nvtxRangePop();
+  //nvtxRangePop();
   cout << "Done with mean_of_mean with T[secs] = " << Timer << endl;
 
 #if(_OPENACC)
@@ -983,12 +983,12 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
     spectra_mean[0:nsamp], spectra_var[0:nsamp])
 //#pragma acc update device(stage.dptr[0:stage.size])
 #endif
-  nvtxRangePush("updateIpBuffer");
+  //nvtxRangePush("updateIpBuffer");
   gettimeofday(&startRoutine, NULL);
   update_input_buffer(nsamp, nchans, input_buffer, stage, var_rescale, mean_rescale);
   gettimeofday(&endRoutine, NULL);
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
-  nvtxRangePop();
+  //nvtxRangePop();
   cout << "Done with Ip Buffer Update with T[secs] = " << Timer << endl;
 
   gettimeofday(&endTimer, NULL);
@@ -1696,9 +1696,9 @@ int main()
   gettimeofday(&startReadTimer, NULL);
 	char fname[100] = "input_buffer.txt";
 
-  nvtxRangePush("readInputBuffer");
+//  nvtxRangePush("readInputBuffer");
 	readInputBuffer(input_buffer, nsamp, nchans, fname);
-  nvtxRangePop();
+  //nvtxRangePop();
 
 //  Array2D<unisgned short> ip_2D(nsamp, nchans);
 //  for(int t = 0,i=0; t < nsamp; ++t,++i)
