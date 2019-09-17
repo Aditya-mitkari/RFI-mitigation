@@ -166,7 +166,7 @@ void random_spectra(float* random_spectra_one, float* random_spectra_two, int nc
 
 }
 
-void channel_process(Array2D<int>& spectra_mask, Array2D<float>& stage, double *chan_mean, double *chan_var,
+void channel_process(Array2D<char>& spectra_mask, Array2D<float>& stage, double *chan_mean, double *chan_var,
     int nsamp, int nchans, float *random_chan_one, float *random_chan_two)
 {
 	short int *chan_mask = ( short int* )malloc( nchans * sizeof( short int ) );
@@ -187,7 +187,7 @@ void channel_process(Array2D<int>& spectra_mask, Array2D<float>& stage, double *
 #if(_OPENACC)
 #pragma acc loop vector
 #endif
-    for( int t = 0; t < nsamp; t++ ) spectra_mask(t,c) = 1;
+    for( int t = 0; t < nsamp; t++ ) spectra_mask(c,t) = 1;
 
 		int counter = nsamp;
 		int rounds = 1;
@@ -207,7 +207,7 @@ void channel_process(Array2D<int>& spectra_mask, Array2D<float>& stage, double *
 #endif
       for( int t = 0; t < nsamp ; t++ )
 			{
-	        chan_mean_c += stage(t,c) * spectra_mask(t,c);
+	        chan_mean_c += stage(t,c) * spectra_mask(c,t);
       }
 
 			if( counter == 0 )
@@ -224,7 +224,7 @@ void channel_process(Array2D<int>& spectra_mask, Array2D<float>& stage, double *
 			for( int t = 0; t < nsamp ; t++)
 			{
         float store1 = stage(t,c) - chan_mean_c;
-        chan_var_c += store1 * store1 * spectra_mask(t,c);
+        chan_var_c += store1 * store1 * spectra_mask(c,t);
 			}
 
 			chan_var_c /= ( counter );
@@ -246,12 +246,12 @@ void channel_process(Array2D<int>& spectra_mask, Array2D<float>& stage, double *
         float threshold = (stage(t,c) - chan_mean_c) / chan_var_c;
 				if( threshold > sigma_cut || threshold < -sigma_cut )
 				{
-					spectra_mask(t,c) = 0;
+					spectra_mask(c,t) = 0;
 				}
 				else
 				{
           counter++;
-					spectra_mask(t,c) = 1;
+					spectra_mask(c,t) = 1;
 				}
 			}
 
@@ -294,13 +294,13 @@ void channel_process(Array2D<int>& spectra_mask, Array2D<float>& stage, double *
 #pragma acc exit data copyout(chan_mean[0:nchans], chan_var[0:nchans])
 }
 
-void sample_process_V2(double *spectra_mean, Array2D<float>& stage, Array2D<int>& spectra_mask,
+void sample_process_V2(double *spectra_mean, Array2D<float>& stage, Array2D<char>& spectra_mask,
     double *spectra_var, int nsamp, int nchans, float *random_spectra_one, float *random_spectra_two)
 {
 	float	sigma_cut	= 2.0f;
   int nchans_loc = nchans;
 
-  Array2D<int> chan_mask(nsamp,nchans);
+  Array2D<char> chan_mask(nsamp,nchans);
   unsigned stage_size = stage.size;
 
 #if(_OPENACC)
@@ -380,7 +380,7 @@ void sample_process_V2(double *spectra_mean, Array2D<float>& stage, Array2D<int>
 
 			if( (spectra_var_t < 1e-7) || (!counter) )
 			{
-				spectra_mask(t,nchans-1) = 0;
+				spectra_mask(nchans-1,t) = 0;
 				finish = true;
 			}
 			if(fabs( spectra_mean_t - old_mean ) < 0.001 && fabs( spectra_var_t - old_var ) < 0.0001)
@@ -399,10 +399,10 @@ void sample_process_V2(double *spectra_mean, Array2D<float>& stage, Array2D<int>
 #endif
 			for( int c = 0; c < nchans; c++ )
 			{
-				stage(t,c) = ( stage(t,c) - (float)spectra_mean[t] ) / (float)spectra_var[t] * spectra_mask(t,nchans-1);
+				stage(t,c) = ( stage(t,c) - (float)spectra_mean[t] ) / (float)spectra_var[t] * spectra_mask(nchans-1,t);
 			}
 
-		if( !spectra_mask(t,nchans-1) )
+		if( !spectra_mask(nchans-1,t) )
 		{
 			int perm_one = (int)( ( (float)rand_local() / (float)RAND_MAX ) * nchans);
 
@@ -416,31 +416,35 @@ void sample_process_V2(double *spectra_mean, Array2D<float>& stage, Array2D<int>
 
 			spectra_mean[ t ] = 0.0;
 			spectra_var[ t ]  = 1.0;
-			spectra_mask(t,nchans-1) = 1;
+//			spectra_mask(c,t) = 1;
 		}
   }
 
 
+#if(_OPENACC)
 #pragma acc update self(stage.dptr[0:stage_size])
 #pragma acc exit data copyout(spectra_mean[0:nsamp], spectra_var[0:nsamp])
+#pragma acc exit data delete(chan_mask[0:1], chan_mask.dptr[0:chan_mask.size])
+#endif
 }
 
 void update_input_buffer(int nsamp, int nchans, unsigned short *input_buffer, Array2D<float>& stage, double var_rescale, double mean_rescale)
 {
   unsigned short *ip_loc = input_buffer;
-//#if(_OPENACC)
-//#pragma acc parallel loop gang vector collapse(2) \
-//  copy(ip_loc[0:nchans*nsamp]) \
-//  present(stage)
-//#endif
-		for( int t = 0; t < (nsamp); t++ )
-	{
+#if(_OPENACC)
+#pragma acc parallel loop gang vector collapse(2) \
+  copy(ip_loc[0:nchans*nsamp]) \
+  present(stage)
+#endif
 	for( int c = 0; c < nchans; c++ )
+	{
+		for( int t = 0; t < (nsamp); t++ )
 		{
 			//(*input_buffer)[c  + (size_t)nchans * t] = (unsigned char) ((stage[c * (size_t)nsamp + t]*orig_var)+orig_mean);
 			ip_loc[ c  + (size_t)nchans * t ] = (unsigned char) ( ( stage(t,c) * var_rescale ) + mean_rescale );
     }
   }
+#pragma acc exit data delete(stage, stage.dptr[0:stage.size])
 }
 
 void whileLoop_V2(Array2D<float>& stage, int *chan_mask, double *chan_mean, double *chan_var,
@@ -865,7 +869,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
 
 //	int *spectra_mask = ( int* )malloc( nsamp * sizeof( int ) );
 //	for( int t = 0; t < nsamp; t++ ) spectra_mask[ t ] = 1;
-	Array2D<int> spectra_mask(nsamp,nchans);
+	Array2D<char> spectra_mask(nchans,nsamp);
 
 	double *chan_mean = ( double* )malloc( nchans * sizeof( double ) );
   for( int c = 0; c < nchans; c++ ) chan_mean[ c ] = 0.0;
@@ -891,33 +895,57 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   transpose_stage_ip(stage, input_buffer, nsamp, nchans);
   nvtxRangePop();
 
+  cout << "Done with transpose_stage" << endl;
+
 #if(_OPENACC)
 #pragma acc enter data copyin(stage[0:1], stage.dptr[0:stage.size])
 #endif
 
 
   reduce_orig_mean(stage, nsamp, nchans, orig_mean);
+  cout << "Done with reduce_mean" << endl;
 
   reduce_orig_var(stage, nsamp, nchans, orig_mean, orig_var);
+  cout << "Done with reduce_var" << endl;
 
   nvtxRangePush("random_chan");
   random_chan(random_chan_one, random_chan_two, nsamp);
   nvtxRangePop();
+  cout << "Done with random_chan" << endl;
 
   nvtxRangePush("random_spectra");
   random_spectra(random_spectra_one, random_spectra_two, nchans);
   nvtxRangePop();
+  cout << "Done with random_spectra" << endl;
 
   nvtxRangePush("channel_process");
   channel_process(spectra_mask, stage, chan_mean, chan_var, nsamp, nchans, random_chan_one, random_chan_two);
   nvtxRangePop();
+  cout << "Done with channel process" << endl;
 
-	// Find the BLN and try to flatten the input data per spectra (remove non-stationary component).
+  //Copy the spectra_mask iinto a different 1D array
+//  short int *spectra_mask_t = (short int*) malloc(nsamp*sizeof(short int));
+//#if(_OPENACC)
+//#pragma acc enter data copyin (spectra_mask_t[0:nsamp])
+//#pragma acc parallel loop gang vector
+//#endif
+//  for(int t = 0; t < nsamp; ++t)
+//    spectra_mask_t[t] = spectra_mask(nchans-1,t);
+
+//#if(_OPENACC)
+//#pragma exit data delete(spectra_mask, spectra_mask.dptr[0:spectra_mask.size])
+//#pragma acc enter data copyin (spectra_mask_t[0:nsamp])
+//#endif
 
   nvtxRangePush("sample_process");
   sample_process_V2( spectra_mean, stage, spectra_mask, spectra_var, nsamp, nchans, random_spectra_one, random_spectra_two);
   nvtxRangePop();
+  cout << "Done with sample process" << endl;
 
+//  free(spectra_mask_t);
+#if(_OPENACC)
+#pragma acc exit data delete (spectra_mask, spectra_mask.dptr[0:spectra_mask.size])
+#endif
 
 	for( int c = 0; c < nchans; c++ ) chan_mask[ c ] = 1;
 
@@ -928,19 +956,21 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
       random_chan_one, random_chan_two, spectra_mean, spectra_var,
       random_spectra_one, random_spectra_two);
   nvtxRangePop();
+  cout << "Done with mean_of_mean" << endl;
 
 #if(_OPENACC)
-#pragma acc update device(stage.dptr[0:stage.size])
+//#pragma acc update device(stage.dptr[0:stage.size])
 #endif
   nvtxRangePush("updateIpBuffer");
   update_input_buffer(nsamp, nchans, input_buffer, stage, var_rescale, mean_rescale);
   nvtxRangePop();
+  cout << "Done with update Ip Buffer" << endl;
 
   gettimeofday(&endTimer, NULL);
   elapsedTimer = (endTimer.tv_sec - startTimer.tv_sec) + 1e-6 * (endTimer.tv_usec - startTimer.tv_usec);
 
 
-  write_output_file(nchans, nsamp, file_reducer, orig_mean, orig_var, sigma_cut, var_rescale, mean_rescale, stage);
+//  write_output_file(nchans, nsamp, file_reducer, orig_mean, orig_var, sigma_cut, var_rescale, mean_rescale, stage);
 
 
 	free(chan_mask);
@@ -1632,7 +1662,7 @@ int main()
   //Total Time of the application
   gettimeofday(&startTimer, NULL);
 
-  int nsamp = 491522/N;//10977282;
+  int nsamp = 491522;//10977282;
   int  nchans = 4096;
   unsigned long long in_buffer_bytes = nsamp * nchans * sizeof( unsigned short );
   unsigned short *input_buffer = ( unsigned short* )malloc( in_buffer_bytes );
