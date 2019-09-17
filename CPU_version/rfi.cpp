@@ -31,7 +31,7 @@
 #if defined(PRODUCTION_VERSION)
 #define N 1
 #else
-#define N 30
+#define N 50
 #endif
 
 inline float rand_local()
@@ -941,6 +941,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   gettimeofday(&startRoutine, NULL);
   random_spectra(random_spectra_one, random_spectra_two, nchans);
   gettimeofday(&endRoutine, NULL);
+  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   nvtxRangePop();
   cout << "Done with random spectra with T[secs] = " << Timer << endl;
 
@@ -948,6 +949,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   gettimeofday(&startRoutine, NULL);
   channel_process(spectra_mask, stage, chan_mean, chan_var, nsamp, nchans, random_chan_one, random_chan_two);
   gettimeofday(&endRoutine, NULL);
+  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   nvtxRangePop();
   cout << "Done with channel process with T[secs] = " << Timer << endl;
 
@@ -955,6 +957,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   gettimeofday(&startRoutine, NULL);
   sample_process_V2( spectra_mean, stage, spectra_mask, spectra_var, nsamp, nchans, random_spectra_one, random_spectra_two);
   gettimeofday(&endRoutine, NULL);
+  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   nvtxRangePop();
   cout << "Done with sample process with T[secs] = " << Timer << endl;
 
@@ -964,12 +967,14 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
 #endif
 
   double mean_rescale = 0.0, var_rescale = 0.0;
+
   nvtxRangePush("whileLoop");
   gettimeofday(&startRoutine, NULL);
   whileLoop_V2(stage, chan_mask, chan_mean, chan_var, nsamp, nchans, mean_rescale, var_rescale,
       random_chan_one, random_chan_two, spectra_mean, spectra_var,
       random_spectra_one, random_spectra_two);
   gettimeofday(&endRoutine, NULL);
+  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   nvtxRangePop();
   cout << "Done with mean_of_mean with T[secs] = " << Timer << endl;
 
@@ -982,6 +987,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   gettimeofday(&startRoutine, NULL);
   update_input_buffer(nsamp, nchans, input_buffer, stage, var_rescale, mean_rescale);
   gettimeofday(&endRoutine, NULL);
+  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   nvtxRangePop();
   cout << "Done with Ip Buffer Update with T[secs] = " << Timer << endl;
 
