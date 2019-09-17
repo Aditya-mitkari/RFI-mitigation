@@ -23,7 +23,7 @@
 #else
 #include <math.h>
 #endif
-#include <nvToolsExt.h>
+//#include <nvToolsExt.h>
 
 #include "arrayMD.h"
 
@@ -898,16 +898,16 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
 	double orig_mean = 0.0;
 	double orig_var=0.0;
 
+#if(_OPENACC)
+#pragma acc enter data copyin(stage[0:1], stage.dptr[0:stage.size], \
+    input_buffer[0:nsamp*nchans])
+#endif
 
   timeval startTimer, endTimer;
   timeval startRoutine, endRoutine;
   gettimeofday(&startTimer, NULL);
   double routine_add_time = 0.0;
 
-#if(_OPENACC)
-#pragma acc enter data copyin(stage[0:1], stage.dptr[0:stage.size], \
-    input_buffer[0:nsamp*nchans])
-#endif
 
 //  nvtxRangePush("transpose");
   gettimeofday(&startRoutine, NULL);
@@ -917,21 +917,21 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   routine_add_time += Timer;
   //nvtxRangePop();
 
-  cout << "Done with transpose_stage with T[secs] = " << Timer << endl;
+//  cout << "Done with transpose_stage with T[secs] = " << Timer << endl;
 
   gettimeofday(&startRoutine, NULL);
   reduce_orig_mean(stage, nsamp, nchans, orig_mean);
   gettimeofday(&endRoutine, NULL);
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   routine_add_time += Timer;
-  cout << "Done with reduce_mean with T[secs] = " << Timer << endl;
+//  cout << "Done with reduce_mean with T[secs] = " << Timer << endl;
 
   gettimeofday(&startRoutine, NULL);
   reduce_orig_var(stage, nsamp, nchans, orig_mean, orig_var);
   gettimeofday(&endRoutine, NULL);
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   routine_add_time += Timer;
-  cout << "Done with reduce_var with T[secs] = " << Timer << endl;
+//  cout << "Done with reduce_var with T[secs] = " << Timer << endl;
 
 //  nvtxRangePush("random_chan");
   gettimeofday(&startRoutine, NULL);
@@ -940,7 +940,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   routine_add_time += Timer;
   //nvtxRangePop();
-  cout << "Done with random chan with T[secs] = " << Timer << endl;
+//  cout << "Done with random chan with T[secs] = " << Timer << endl;
 
 //  nvtxRangePush("random_spectra");
   gettimeofday(&startRoutine, NULL);
@@ -949,7 +949,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   routine_add_time += Timer;
   //nvtxRangePop();
-  cout << "Done with random spectra with T[secs] = " << Timer << endl;
+//  cout << "Done with random spectra with T[secs] = " << Timer << endl;
 
 //  nvtxRangePush("channel_process");
   gettimeofday(&startRoutine, NULL);
@@ -958,7 +958,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   routine_add_time += Timer;
   //nvtxRangePop();
-  cout << "Done with channel process with T[secs] = " << Timer << endl;
+//  cout << "Done with channel process with T[secs] = " << Timer << endl;
 
 //  nvtxRangePush("sample_process");
   gettimeofday(&startRoutine, NULL);
@@ -967,7 +967,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   routine_add_time += Timer;
   //nvtxRangePop();
-  cout << "Done with sample process with T[secs] = " << Timer << endl;
+//  cout << "Done with sample process with T[secs] = " << Timer << endl;
 
 //  free(spectra_mask_t);
 #if(_OPENACC)
@@ -985,7 +985,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   routine_add_time += Timer;
   //nvtxRangePop();
-  cout << "Done with mean_of_mean with T[secs] = " << Timer << endl;
+//  cout << "Done with mean_of_mean with T[secs] = " << Timer << endl;
 
 #if(_OPENACC)
 #pragma acc exit data delete (random_spectra_one[0:nchans], random_spectra_two[0:nchans], \
@@ -999,7 +999,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   routine_add_time += Timer;
   //nvtxRangePop();
-  cout << "Done with Ip Buffer Update with T[secs] = " << Timer << endl;
+//  cout << "Done with Ip Buffer Update with T[secs] = " << Timer << endl;
 
   cout << "Only routine addition timings = " << routine_add_time << endl;
 
