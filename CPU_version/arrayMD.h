@@ -21,6 +21,7 @@ template<typename T> class Array2D
 
     inline T& operator() (unsigned i1, unsigned i2)
     {
+//      return dptr[i1+(n1*i2)];
       return dptr[i2+(n2*i1)];
     }
 

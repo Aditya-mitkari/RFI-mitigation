@@ -166,29 +166,28 @@ void random_spectra(float* random_spectra_one, float* random_spectra_two, int nc
 
 }
 
-void channel_process(int *spectra_mask, Array2D<float>& stage, double *chan_mean, double *chan_var,
+void channel_process(Array2D<int>& spectra_mask, Array2D<float>& stage, double *chan_mean, double *chan_var,
     int nsamp, int nchans, float *random_chan_one, float *random_chan_two)
 {
 	short int *chan_mask = ( short int* )malloc( nchans * sizeof( short int ) );
 	short int *Nchan_mask = ( short int* )malloc( nchans * sizeof( short int ) );
 
 #if(_OPENACC)
-#pragma acc enter data copyin (spectra_mask[0:nsamp])
+#pragma acc enter data copyin (spectra_mask[0:1], spectra_mask.dptr[0:spectra_mask.size])
 #endif
-	for( int c = 0; c < nchans; c++ )
-  {
-    chan_mask[ c ] = 1;
-    Nchan_mask[ c ] = 0;
-  }
 
 	float	sigma_cut	= 2.0f;
+#if(_OPENACC)
+#pragma acc parallel loop gang \
+  present(spectra_mask, stage)
+#endif
   for( int c = 0; c < nchans; c++ )
 	{
+    chan_mask[ c ] = 1;
 #if(_OPENACC)
-#pragma acc parallel loop gang vector \
-  present(spectra_mask)
+#pragma acc loop vector
 #endif
-    for( int t = 0; t < nsamp; t++ ) spectra_mask[t] = 1;
+    for( int t = 0; t < nsamp; t++ ) spectra_mask(t,c) = 1;
 
 		int counter = nsamp;
 		int rounds = 1;
@@ -203,32 +202,29 @@ void channel_process(int *spectra_mask, Array2D<float>& stage, double *chan_mean
 			chan_var_c = 0.0;
 
 #if(_OPENACC)
-#pragma acc parallel loop gang vector \
-  present(spectra_mask, stage) \
+#pragma acc loop vector \
       reduction(+:chan_mean_c)
 #endif
       for( int t = 0; t < nsamp ; t++ )
 			{
-	        chan_mean_c += stage(t,c) * spectra_mask[t];
+	        chan_mean_c += stage(t,c) * spectra_mask(t,c);
       }
 
 			if( counter == 0 )
 			{
 				chan_mask[ c ] = 0;
-        Nchan_mask[c] = 1;
 				finish = true;
 			}
 			chan_mean_c /= ( counter );
 
 #if(_OPENACC)
-#pragma acc parallel loop gang vector \
-  present(spectra_mask, stage)\
+#pragma acc loop vector \
       reduction(+:chan_var_c)
 #endif
 			for( int t = 0; t < nsamp ; t++)
 			{
         float store1 = stage(t,c) - chan_mean_c;
-        chan_var_c += store1 * store1 * spectra_mask[t];
+        chan_var_c += store1 * store1 * spectra_mask(t,c);
 			}
 
 			chan_var_c /= ( counter );
@@ -237,14 +233,12 @@ void channel_process(int *spectra_mask, Array2D<float>& stage, double *chan_mean
 			if( chan_var_c < 1e-7 )
 			{
 				chan_mask[ c ] = 0;
-        Nchan_mask[c] = 1;
 				finish = true;
 			}
 
       counter = 0;
 #if(_OPENACC)
-#pragma acc parallel loop gang vector \
-  present(spectra_mask, stage)\
+#pragma acc loop vector \
       reduction(+:counter)
 #endif
 			for( int t = 0; t < ( nsamp ); t++ )
@@ -252,12 +246,12 @@ void channel_process(int *spectra_mask, Array2D<float>& stage, double *chan_mean
         float threshold = (stage(t,c) - chan_mean_c) / chan_var_c;
 				if( threshold > sigma_cut || threshold < -sigma_cut )
 				{
-					spectra_mask[ t ] = 0;
+					spectra_mask(t,c) = 0;
 				}
 				else
 				{
           counter++;
-					spectra_mask[ t ] = 1;
+					spectra_mask(t,c) = 1;
 				}
 			}
 
@@ -277,7 +271,7 @@ void channel_process(int *spectra_mask, Array2D<float>& stage, double *chan_mean
 
 #if (_OPENACC)
 #pragma acc enter data copyin (chan_mask[0:nchans], chan_mean[0:nchans], chan_var[0:nchans], \
-    random_chan_one[0:nsamp], Nchan_mask[0:nchans])
+    random_chan_one[0:nsamp])
 #pragma acc parallel loop gang vector collapse(2) \
   present(stage, chan_mean, chan_var, random_chan_one, chan_mask)
 #endif
@@ -287,12 +281,12 @@ void channel_process(int *spectra_mask, Array2D<float>& stage, double *chan_mean
 			{
 				stage(t,c) = ( stage(t,c) - ( float )chan_mean[ c ] ) / ( float )chan_var[ c ] * chan_mask[c];
 
-        if(Nchan_mask[c])
+        if(!chan_mask[c])
         {
           int perm_one = ( int )( ( ( float )rand_local() / ( float )RAND_MAX ) * nsamp );
-          stage(t,c) = random_chan_one[ ( t + perm_one ) % nsamp ] * Nchan_mask[c];
-    			chan_mean[ c ] = 0.0*Nchan_mask[c];
-    			chan_var[ c ]  = 1.0*Nchan_mask[c];
+          stage(t,c) = random_chan_one[ ( t + perm_one ) % nsamp ] ;
+    			chan_mean[ c ] = 0.0;
+    			chan_var[ c ]  = 1.0;
         }
 			}
   }
@@ -300,7 +294,7 @@ void channel_process(int *spectra_mask, Array2D<float>& stage, double *chan_mean
 #pragma acc exit data copyout(chan_mean[0:nchans], chan_var[0:nchans])
 }
 
-void sample_process_V2(double *spectra_mean, Array2D<float>& stage, int *spectra_mask,
+void sample_process_V2(double *spectra_mean, Array2D<float>& stage, Array2D<int>& spectra_mask,
     double *spectra_var, int nsamp, int nchans, float *random_spectra_one, float *random_spectra_two)
 {
 	float	sigma_cut	= 2.0f;
@@ -386,7 +380,7 @@ void sample_process_V2(double *spectra_mean, Array2D<float>& stage, int *spectra
 
 			if( (spectra_var_t < 1e-7) || (!counter) )
 			{
-				spectra_mask[ t ] = 0;
+				spectra_mask(t,nchans-1) = 0;
 				finish = true;
 			}
 			if(fabs( spectra_mean_t - old_mean ) < 0.001 && fabs( spectra_var_t - old_var ) < 0.0001)
@@ -405,10 +399,10 @@ void sample_process_V2(double *spectra_mean, Array2D<float>& stage, int *spectra
 #endif
 			for( int c = 0; c < nchans; c++ )
 			{
-				stage(t,c) = ( stage(t,c) - (float)spectra_mean[t] ) / (float)spectra_var[t] * spectra_mask[t];
+				stage(t,c) = ( stage(t,c) - (float)spectra_mean[t] ) / (float)spectra_var[t] * spectra_mask(t,nchans-1);
 			}
 
-		if( !spectra_mask[ t ] )
+		if( !spectra_mask(t,nchans-1) )
 		{
 			int perm_one = (int)( ( (float)rand_local() / (float)RAND_MAX ) * nchans);
 
@@ -422,30 +416,41 @@ void sample_process_V2(double *spectra_mean, Array2D<float>& stage, int *spectra
 
 			spectra_mean[ t ] = 0.0;
 			spectra_var[ t ]  = 1.0;
-			spectra_mask[ t ] = 1;
+			spectra_mask(t,nchans-1) = 1;
 		}
   }
-#pragma acc exit data copyout(stage.dptr[0:stage_size], spectra_mean[0:nsamp], spectra_mask[0:nsamp], spectra_var[0:nsamp])
+
+
+#pragma acc update self(stage.dptr[0:stage_size])
+#pragma acc exit data copyout(spectra_mean[0:nsamp], spectra_var[0:nsamp])
 }
 
 void update_input_buffer(int nsamp, int nchans, unsigned short *input_buffer, Array2D<float>& stage, double var_rescale, double mean_rescale)
 {
-	for( int c = 0; c < nchans; c++ )
-	{
+  unsigned short *ip_loc = input_buffer;
+//#if(_OPENACC)
+//#pragma acc parallel loop gang vector collapse(2) \
+//  copy(ip_loc[0:nchans*nsamp]) \
+//  present(stage)
+//#endif
 		for( int t = 0; t < (nsamp); t++ )
+	{
+	for( int c = 0; c < nchans; c++ )
 		{
 			//(*input_buffer)[c  + (size_t)nchans * t] = (unsigned char) ((stage[c * (size_t)nsamp + t]*orig_var)+orig_mean);
-			(input_buffer)[ c  + (size_t)nchans * t ] = (unsigned char) ( ( stage(t,c) * var_rescale ) + mean_rescale );
+			ip_loc[ c  + (size_t)nchans * t ] = (unsigned char) ( ( stage(t,c) * var_rescale ) + mean_rescale );
     }
   }
 }
 
 void whileLoop_V2(Array2D<float>& stage, int *chan_mask, double *chan_mean, double *chan_var,
     int nsamp, int nchans, double& mean_rescale, double& var_rescale,
-    float *random_chan_one, float *random_chan_two, int *spectra_mask, double *spectra_mean,
+    float *random_chan_one, float *random_chan_two, double *spectra_mean,
     double *spectra_var, float *random_spectra_one, float *random_spectra_two )
 {
 	float	sigma_cut	= 2.0f;
+	int *spectra_mask = ( int* )malloc( nsamp * sizeof( int ) );
+	for( int t = 0; t < nsamp; t++ ) spectra_mask[ t ] = 1;
 
 	// Find the mean and SD of the mean and SD...
 	int finish = 0;
@@ -858,8 +863,9 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
 	int *chan_mask = ( int* )malloc( nchans * sizeof( int ) );
 	for( int c = 0; c < nchans; c++ ) chan_mask[ c ] = 1;
 
-	int *spectra_mask = ( int* )malloc( nsamp * sizeof( int ) );
-	for( int t = 0; t < nsamp; t++ ) spectra_mask[ t ] = 1;
+//	int *spectra_mask = ( int* )malloc( nsamp * sizeof( int ) );
+//	for( int t = 0; t < nsamp; t++ ) spectra_mask[ t ] = 1;
+	Array2D<int> spectra_mask(nsamp,nchans);
 
 	double *chan_mean = ( double* )malloc( nchans * sizeof( double ) );
   for( int c = 0; c < nchans; c++ ) chan_mean[ c ] = 0.0;
@@ -907,9 +913,6 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   nvtxRangePop();
 
 	// Find the BLN and try to flatten the input data per spectra (remove non-stationary component).
-#if(_OPENACC)
-//#pragma acc update device(stage.dptr[0:stage.size])
-#endif
 
   nvtxRangePush("sample_process");
   sample_process_V2( spectra_mean, stage, spectra_mask, spectra_var, nsamp, nchans, random_spectra_one, random_spectra_two);
@@ -922,10 +925,13 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
 
   nvtxRangePush("whileLoop");
   whileLoop_V2(stage, chan_mask, chan_mean, chan_var, nsamp, nchans, mean_rescale, var_rescale,
-      random_chan_one, random_chan_two, spectra_mask, spectra_mean, spectra_var,
+      random_chan_one, random_chan_two, spectra_mean, spectra_var,
       random_spectra_one, random_spectra_two);
   nvtxRangePop();
 
+#if(_OPENACC)
+#pragma acc update device(stage.dptr[0:stage.size])
+#endif
   nvtxRangePush("updateIpBuffer");
   update_input_buffer(nsamp, nchans, input_buffer, stage, var_rescale, mean_rescale);
   nvtxRangePop();
@@ -938,7 +944,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
 
 
 	free(chan_mask);
-	free(spectra_mask);
+//	free(spectra_mask);
 	free(chan_mean);
 	free(chan_var);
 	free(spectra_mean);
