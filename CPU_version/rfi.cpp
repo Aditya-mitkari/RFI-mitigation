@@ -31,7 +31,7 @@
 #if defined(PRODUCTION_VERSION)
 #define N 1
 #else
-#define N 50
+#define N 30
 #endif
 
 inline float rand_local()
@@ -900,6 +900,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
 
 
   timeval startTimer, endTimer;
+  timeval startRoutine, endRoutine;
   gettimeofday(&startTimer, NULL);
 
 #if(_OPENACC)
@@ -908,66 +909,69 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
 #endif
 
   nvtxRangePush("transpose");
+  gettimeofday(&startRoutine, NULL);
   transpose_stage_ip(stage, input_buffer, nsamp, nchans);
+  gettimeofday(&endRoutine, NULL);
+  double Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   nvtxRangePop();
 
-  cout << "Done with transpose_stage" << endl;
+  cout << "Done with transpose_stage with T[secs] = " << Timer << endl;
 
+  gettimeofday(&startRoutine, NULL);
   reduce_orig_mean(stage, nsamp, nchans, orig_mean);
-  cout << "Done with reduce_mean" << endl;
+  gettimeofday(&endRoutine, NULL);
+  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
+  cout << "Done with reduce_mean with T[secs] = " << Timer << endl;
 
+  gettimeofday(&startRoutine, NULL);
   reduce_orig_var(stage, nsamp, nchans, orig_mean, orig_var);
-  cout << "Done with reduce_var" << endl;
+  gettimeofday(&endRoutine, NULL);
+  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
+  cout << "Done with reduce_var with T[secs] = " << Timer << endl;
 
   nvtxRangePush("random_chan");
+  gettimeofday(&startRoutine, NULL);
   random_chan(random_chan_one, random_chan_two, nsamp);
+  gettimeofday(&endRoutine, NULL);
+  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   nvtxRangePop();
-  cout << "Done with random_chan" << endl;
+  cout << "Done with random chan with T[secs] = " << Timer << endl;
 
   nvtxRangePush("random_spectra");
+  gettimeofday(&startRoutine, NULL);
   random_spectra(random_spectra_one, random_spectra_two, nchans);
+  gettimeofday(&endRoutine, NULL);
   nvtxRangePop();
-  cout << "Done with random_spectra" << endl;
+  cout << "Done with random spectra with T[secs] = " << Timer << endl;
 
   nvtxRangePush("channel_process");
+  gettimeofday(&startRoutine, NULL);
   channel_process(spectra_mask, stage, chan_mean, chan_var, nsamp, nchans, random_chan_one, random_chan_two);
+  gettimeofday(&endRoutine, NULL);
   nvtxRangePop();
-  cout << "Done with channel process" << endl;
-
-  //Copy the spectra_mask iinto a different 1D array
-//  short int *spectra_mask_t = (short int*) malloc(nsamp*sizeof(short int));
-//#if(_OPENACC)
-//#pragma acc enter data copyin (spectra_mask_t[0:nsamp])
-//#pragma acc parallel loop gang vector
-//#endif
-//  for(int t = 0; t < nsamp; ++t)
-//    spectra_mask_t[t] = spectra_mask(nchans-1,t);
-
-//#if(_OPENACC)
-//#pragma exit data delete(spectra_mask, spectra_mask.dptr[0:spectra_mask.size])
-//#pragma acc enter data copyin (spectra_mask_t[0:nsamp])
-//#endif
+  cout << "Done with channel process with T[secs] = " << Timer << endl;
 
   nvtxRangePush("sample_process");
+  gettimeofday(&startRoutine, NULL);
   sample_process_V2( spectra_mean, stage, spectra_mask, spectra_var, nsamp, nchans, random_spectra_one, random_spectra_two);
+  gettimeofday(&endRoutine, NULL);
   nvtxRangePop();
-  cout << "Done with sample process" << endl;
+  cout << "Done with sample process with T[secs] = " << Timer << endl;
 
 //  free(spectra_mask_t);
 #if(_OPENACC)
 #pragma acc exit data delete (spectra_mask, spectra_mask.dptr[0:spectra_mask.size])
 #endif
 
-	for( int c = 0; c < nchans; c++ ) chan_mask[ c ] = 1;
-
   double mean_rescale = 0.0, var_rescale = 0.0;
-
   nvtxRangePush("whileLoop");
+  gettimeofday(&startRoutine, NULL);
   whileLoop_V2(stage, chan_mask, chan_mean, chan_var, nsamp, nchans, mean_rescale, var_rescale,
       random_chan_one, random_chan_two, spectra_mean, spectra_var,
       random_spectra_one, random_spectra_two);
+  gettimeofday(&endRoutine, NULL);
   nvtxRangePop();
-  cout << "Done with mean_of_mean" << endl;
+  cout << "Done with mean_of_mean with T[secs] = " << Timer << endl;
 
 #if(_OPENACC)
 #pragma acc exit data delete (random_spectra_one[0:nchans], random_spectra_two[0:nchans], \
@@ -975,9 +979,11 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
 //#pragma acc update device(stage.dptr[0:stage.size])
 #endif
   nvtxRangePush("updateIpBuffer");
+  gettimeofday(&startRoutine, NULL);
   update_input_buffer(nsamp, nchans, input_buffer, stage, var_rescale, mean_rescale);
+  gettimeofday(&endRoutine, NULL);
   nvtxRangePop();
-  cout << "Done with update Ip Buffer" << endl;
+  cout << "Done with Ip Buffer Update with T[secs] = " << Timer << endl;
 
   gettimeofday(&endTimer, NULL);
   elapsedTimer = (endTimer.tv_sec - startTimer.tv_sec) + 1e-6 * (endTimer.tv_usec - startTimer.tv_usec);
