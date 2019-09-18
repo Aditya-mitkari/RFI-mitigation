@@ -19,6 +19,12 @@ ifeq ($(PRODUCTION),y)
 endif
 
 
+#====================================================
+# Flag to set NVTX range marker
+#====================================================
+ifeq ($(USE_NVTX),y)
+	DEFINE += -DUSE_NVTX
+endif
 
 #====================================================
 # PGI compiler for OpenACC and CUDA compiler
@@ -43,7 +49,11 @@ LDFLAGS = -acc -Mcuda -ta=tesla:cc60
 LDFLAGS += -lcurand
 CXXFLAGS += -Minfo=accel
 endif
-LDFLAGS += -L /usr/local/cuda-10.1/lib64/ -lnvToolsExt
+LDFLAGS += -L /usr/local/cuda-10.1/lib64/
+
+ifeq ($(USE_NVTX),y)
+LDFLAGS += -lnvToolsExt
+endif
 
 CXXFLAGS += $(DEFINE)
 

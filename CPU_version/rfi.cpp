@@ -12,6 +12,30 @@
 #include <stdlib.h>
 #include <sys/time.h>
 
+#ifdef USE_NVTX
+#include <nvToolsExt.h>
+
+const uint32_t colors[] = { 0xff00ff00, 0xff0000ff, 0xffffff00, 0xffff00ff, 0xff00ffff, 0xffff0000, 0xffffffff };
+const int num_colors = sizeof(colors)/sizeof(uint32_t);
+
+#define PUSH_RANGE(name,cid) { \
+      int color_id = cid; \
+      color_id = color_id%num_colors;\
+      nvtxEventAttributes_t eventAttrib = {0}; \
+      eventAttrib.version = NVTX_VERSION; \
+      eventAttrib.size = NVTX_EVENT_ATTRIB_STRUCT_SIZE; \
+      eventAttrib.colorType = NVTX_COLOR_ARGB; \
+      eventAttrib.color = colors[color_id]; \
+      eventAttrib.messageType = NVTX_MESSAGE_TYPE_ASCII; \
+      eventAttrib.message.ascii = name; \
+      nvtxRangePushEx(&eventAttrib); \
+}
+#define POP_RANGE nvtxRangePop();
+#else
+#define PUSH_RANGE(name,cid)
+#define POP_RANGE
+#endif
+
 #define chan_mask(t,c) chan_mask[t*nchans+c]
 #if (_OPENACC)
 #include <openacc.h>
@@ -23,7 +47,6 @@
 #else
 #include <math.h>
 #endif
-//#include <nvToolsExt.h>
 
 #include "arrayMD.h"
 
@@ -33,6 +56,18 @@
 #else
 #define N 50
 #endif
+
+inline void*
+safe_malloc(size_t n)
+{
+  void* p = malloc(n);
+  if(p == NULL)
+  {
+    fprintf(stderr, "Fatal: failed to allocate %zu bytes.\n", n);
+    abort();
+  }
+  return p;
+}
 
 inline float rand_local()
 {
@@ -81,7 +116,7 @@ inline void reduce_orig_mean(Array2D<float>& stage, int nsamp, int nchans, doubl
 #if(_OPENACC)
 #pragma acc parallel loop gang vector collapse(2)\
   present(stage) \
-  reduction(+:orig_mean_loc)
+  reduction(+:orig_mean_loc) async(1)
 #endif
   for(int t = 0; t < nsamp; ++t)
 	{
@@ -103,7 +138,7 @@ void reduce_orig_var(Array2D<float>& stage, int nsamp, int nchans, double orig_m
 #pragma acc parallel loop gang vector collapse(2)\
   copyin(orig_mean_loc) \
   present(stage) \
-  reduction(+:orig_var_loc)
+  reduction(+:orig_var_loc) async(1)
 #endif
   for(int t = 0; t < nsamp; ++t)
 	{
@@ -169,8 +204,8 @@ void random_spectra(float* random_spectra_one, float* random_spectra_two, int nc
 void channel_process(Array2D<char>& spectra_mask, Array2D<float>& stage, double *chan_mean, double *chan_var,
     int nsamp, int nchans, float *random_chan_one, float *random_chan_two)
 {
-	short int *chan_mask = ( short int* )malloc( nchans * sizeof( short int ) );
-	short int *Nchan_mask = ( short int* )malloc( nchans * sizeof( short int ) );
+	short int *chan_mask = ( short int* )safe_malloc( nchans * sizeof( short int ) );
+	short int *Nchan_mask = ( short int* )safe_malloc( nchans * sizeof( short int ) );
 
 #if(_OPENACC)
 #pragma acc enter data copyin (spectra_mask[0:1], spectra_mask.dptr[0:spectra_mask.size])
@@ -460,7 +495,7 @@ void whileLoop_V2(Array2D<float>& stage, int *chan_mask, double *chan_mean, doub
     double *spectra_var, float *random_spectra_one, float *random_spectra_two )
 {
 	float	sigma_cut	= 2.0f;
-	int *spectra_mask = ( int* )malloc( nsamp * sizeof( int ) );
+	int *spectra_mask = ( int* )safe_malloc( nsamp * sizeof( int ) );
 	for( int t = 0; t < nsamp; t++ ) spectra_mask[ t ] = 1;
 
 	// Find the mean and SD of the mean and SD...
@@ -869,55 +904,97 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   Array2D<float> stage(nsamp,nchans);
 
 	// Random Vectors
-	float *random_chan_one = ( float* )malloc( nsamp * sizeof( float ) );
-	float *random_chan_two = ( float* )malloc( nsamp * sizeof( float ) );
-	float *random_spectra_one = ( float* )malloc( nchans * sizeof( float ) );
-	float *random_spectra_two = ( float* )malloc( nchans * sizeof( float ) );
+	float *random_chan_one = ( float* )safe_malloc( nsamp * sizeof( float ) );
+	float *random_chan_two = ( float* )safe_malloc( nsamp * sizeof( float ) );
+	float *random_spectra_one = ( float* )safe_malloc( nchans * sizeof( float ) );
+	float *random_spectra_two = ( float* )safe_malloc( nchans * sizeof( float ) );
 	// Allocate working arrays
 
-	int *chan_mask = ( int* )malloc( nchans * sizeof( int ) );
+	int *chan_mask = ( int* )safe_malloc( nchans * sizeof( int ) );
 	for( int c = 0; c < nchans; c++ ) chan_mask[ c ] = 1;
 
-//	int *spectra_mask = ( int* )malloc( nsamp * sizeof( int ) );
+//	int *spectra_mask = ( int* )safe_malloc( nsamp * sizeof( int ) );
 //	for( int t = 0; t < nsamp; t++ ) spectra_mask[ t ] = 1;
 	Array2D<char> spectra_mask(nchans,nsamp);
 
-	double *chan_mean = ( double* )malloc( nchans * sizeof( double ) );
+	double *chan_mean = ( double* )safe_malloc( nchans * sizeof( double ) );
   for( int c = 0; c < nchans; c++ ) chan_mean[ c ] = 0.0;
 
-	double *chan_var = ( double* )malloc( nsamp * sizeof( double ) );
+	double *chan_var = ( double* )safe_malloc( nsamp * sizeof( double ) );
   for( int c = 0; c < nchans; c++ ) chan_var[ c ] = 0.0;
 
-	double *spectra_mean = ( double* )malloc( nsamp * sizeof( double ) );
+	double *spectra_mean = ( double* )safe_malloc( nsamp * sizeof( double ) );
   for( int t = 0; t < nsamp; t++ ) spectra_mean[ t ] = 0.0;
 
-	double *spectra_var = ( double* )malloc( nsamp * sizeof( double ) );
+	double *spectra_var = ( double* )safe_malloc( nsamp * sizeof( double ) );
   for( int t = 0; t < nsamp; t++ ) spectra_var[ t ] = 0.0;
 
 
 	double orig_mean = 0.0;
 	double orig_var=0.0;
+  timeval startTimer, endTimer;
+  timeval startRoutine, endRoutine;
+  gettimeofday(&startTimer, NULL);
+  double routine_add_time = 0.0;
 
 #if(_OPENACC)
 #pragma acc enter data copyin(stage[0:1], stage.dptr[0:stage.size], \
     input_buffer[0:nsamp*nchans])
 #endif
 
-  timeval startTimer, endTimer;
-  timeval startRoutine, endRoutine;
-  gettimeofday(&startTimer, NULL);
-  double routine_add_time = 0.0;
 
-
-//  nvtxRangePush("transpose");
+  PUSH_RANGE("transpose",1)
   gettimeofday(&startRoutine, NULL);
   transpose_stage_ip(stage, input_buffer, nsamp, nchans);
   gettimeofday(&endRoutine, NULL);
   double Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   routine_add_time += Timer;
-  //nvtxRangePop();
+  POP_RANGE
 
 //  cout << "Done with transpose_stage with T[secs] = " << Timer << endl;
+
+  PUSH_RANGE("random_chan",2)
+  gettimeofday(&startRoutine, NULL);
+  random_chan(random_chan_one, random_chan_two, nsamp);
+  gettimeofday(&endRoutine, NULL);
+  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
+  routine_add_time += Timer;
+  POP_RANGE
+//  cout << "Done with random chan with T[secs] = " << Timer << endl;
+
+  PUSH_RANGE("random_spectra",3)
+  gettimeofday(&startRoutine, NULL);
+  random_spectra(random_spectra_one, random_spectra_two, nchans);
+  gettimeofday(&endRoutine, NULL);
+  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
+  routine_add_time += Timer;
+  POP_RANGE
+//  cout << "Done with random spectra with T[secs] = " << Timer << endl;
+
+  PUSH_RANGE("channel_process",4)
+  gettimeofday(&startRoutine, NULL);
+  channel_process(spectra_mask, stage, chan_mean, chan_var, nsamp, nchans, random_chan_one, random_chan_two);
+  gettimeofday(&endRoutine, NULL);
+  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
+  routine_add_time += Timer;
+  POP_RANGE
+//  cout << "Done with channel process with T[secs] = " << Timer << endl;
+
+  PUSH_RANGE("sample_process",5)
+  gettimeofday(&startRoutine, NULL);
+  sample_process_V2( spectra_mean, stage, spectra_mask, spectra_var, nsamp, nchans, random_spectra_one, random_spectra_two);
+  gettimeofday(&endRoutine, NULL);
+  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
+  routine_add_time += Timer;
+  POP_RANGE
+//  cout << "Done with sample process with T[secs] = " << Timer << endl;
+
+//  free(spectra_mask_t);
+#if(_OPENACC)
+#pragma acc exit data delete (spectra_mask, spectra_mask.dptr[0:spectra_mask.size])
+#endif
+
+  double mean_rescale = 0.0, var_rescale = 0.0;
 
   gettimeofday(&startRoutine, NULL);
   reduce_orig_mean(stage, nsamp, nchans, orig_mean);
@@ -933,50 +1010,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   routine_add_time += Timer;
 //  cout << "Done with reduce_var with T[secs] = " << Timer << endl;
 
-//  nvtxRangePush("random_chan");
-  gettimeofday(&startRoutine, NULL);
-  random_chan(random_chan_one, random_chan_two, nsamp);
-  gettimeofday(&endRoutine, NULL);
-  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
-  routine_add_time += Timer;
-  //nvtxRangePop();
-//  cout << "Done with random chan with T[secs] = " << Timer << endl;
-
-//  nvtxRangePush("random_spectra");
-  gettimeofday(&startRoutine, NULL);
-  random_spectra(random_spectra_one, random_spectra_two, nchans);
-  gettimeofday(&endRoutine, NULL);
-  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
-  routine_add_time += Timer;
-  //nvtxRangePop();
-//  cout << "Done with random spectra with T[secs] = " << Timer << endl;
-
-//  nvtxRangePush("channel_process");
-  gettimeofday(&startRoutine, NULL);
-  channel_process(spectra_mask, stage, chan_mean, chan_var, nsamp, nchans, random_chan_one, random_chan_two);
-  gettimeofday(&endRoutine, NULL);
-  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
-  routine_add_time += Timer;
-  //nvtxRangePop();
-//  cout << "Done with channel process with T[secs] = " << Timer << endl;
-
-//  nvtxRangePush("sample_process");
-  gettimeofday(&startRoutine, NULL);
-  sample_process_V2( spectra_mean, stage, spectra_mask, spectra_var, nsamp, nchans, random_spectra_one, random_spectra_two);
-  gettimeofday(&endRoutine, NULL);
-  Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
-  routine_add_time += Timer;
-  //nvtxRangePop();
-//  cout << "Done with sample process with T[secs] = " << Timer << endl;
-
-//  free(spectra_mask_t);
-#if(_OPENACC)
-#pragma acc exit data delete (spectra_mask, spectra_mask.dptr[0:spectra_mask.size])
-#endif
-
-  double mean_rescale = 0.0, var_rescale = 0.0;
-
-//  nvtxRangePush("whileLoop");
+  PUSH_RANGE("whileLoop",6)
   gettimeofday(&startRoutine, NULL);
   whileLoop_V2(stage, chan_mask, chan_mean, chan_var, nsamp, nchans, mean_rescale, var_rescale,
       random_chan_one, random_chan_two, spectra_mean, spectra_var,
@@ -984,7 +1018,7 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   gettimeofday(&endRoutine, NULL);
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   routine_add_time += Timer;
-  //nvtxRangePop();
+  POP_RANGE
 //  cout << "Done with mean_of_mean with T[secs] = " << Timer << endl;
 
 #if(_OPENACC)
@@ -992,13 +1026,14 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
     spectra_mean[0:nsamp], spectra_var[0:nsamp])
 //#pragma acc update device(stage.dptr[0:stage.size])
 #endif
-  //nvtxRangePush("updateIpBuffer");
+
+  PUSH_RANGE("updateIpBuffer",7)
   gettimeofday(&startRoutine, NULL);
   update_input_buffer(nsamp, nchans, input_buffer, stage, var_rescale, mean_rescale);
   gettimeofday(&endRoutine, NULL);
   Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   routine_add_time += Timer;
-  //nvtxRangePop();
+  POP_RANGE
 //  cout << "Done with Ip Buffer Update with T[secs] = " << Timer << endl;
 
   cout << "Only routine addition timings = " << routine_add_time << endl;
@@ -1025,7 +1060,7 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer, double& elapsedTi
 	int file_reducer = 1;
 	float	sigma_cut	= 2.0f;
 
-	float *stage = ( float* )malloc( ( size_t ) nsamp * ( size_t )nchans * sizeof( float ) );
+	float *stage = ( float* )safe_malloc( ( size_t ) nsamp * ( size_t )nchans * sizeof( float ) );
 
 	int cn = 0;
 
@@ -1070,8 +1105,8 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer, double& elapsedTi
 
 	// Random Vectors
 
-	float *random_chan_one = ( float* )malloc( nsamp * sizeof( float ) );
-	float *random_chan_two = ( float* )malloc( nsamp * sizeof( float ) );
+	float *random_chan_one = ( float* )safe_malloc( nsamp * sizeof( float ) );
+	float *random_chan_two = ( float* )safe_malloc( nsamp * sizeof( float ) );
 
 	for( int t = 0; t < nsamp; t++ )
 	{
@@ -1091,8 +1126,8 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer, double& elapsedTi
 		random_chan_two[ t ] = y2;
 	}
 
-	float *random_spectra_one = ( float* )malloc( nchans * sizeof( float ) );
-	float *random_spectra_two = ( float* )malloc( nchans * sizeof( float ) );
+	float *random_spectra_one = ( float* )safe_malloc( nchans * sizeof( float ) );
+	float *random_spectra_two = ( float* )safe_malloc( nchans * sizeof( float ) );
 
 	for(int c = 0; c < nchans; c++)
 	{
@@ -1114,22 +1149,22 @@ void rfi(int nsamp, int nchans, unsigned short **input_buffer, double& elapsedTi
 
 	// Allocate working arrays
 
-	int *chan_mask = ( int* )malloc( nchans * sizeof( int ) );
+	int *chan_mask = ( int* )safe_malloc( nchans * sizeof( int ) );
 	for( int c = 0; c < nchans; c++ ) chan_mask[ c ] = 1;
 
-	int *spectra_mask = ( int* )malloc( nsamp * sizeof( int ) );
+	int *spectra_mask = ( int* )safe_malloc( nsamp * sizeof( int ) );
 	for( int t = 0; t < nsamp; t++ ) spectra_mask[ t ] = 1;
 
-	double *chan_mean = ( double* )malloc( nchans * sizeof( double ) );
+	double *chan_mean = ( double* )safe_malloc( nchans * sizeof( double ) );
   for( int c = 0; c < nchans; c++ ) chan_mean[ c ] = 0.0;
 
-	double *chan_var = ( double* )malloc( nsamp * sizeof( double ) );
+	double *chan_var = ( double* )safe_malloc( nsamp * sizeof( double ) );
   for( int c = 0; c < nchans; c++ ) chan_var[ c ] = 0.0;
 
-	double *spectra_mean = ( double* )malloc( nsamp * sizeof( double ) );
+	double *spectra_mean = ( double* )safe_malloc( nsamp * sizeof( double ) );
   for( int t = 0; t < nsamp; t++ ) spectra_mean[ t ] = 0.0;
 
-	double *spectra_var = ( double* )malloc( nsamp * sizeof( double ) );
+	double *spectra_var = ( double* )safe_malloc( nsamp * sizeof( double ) );
   for( int t = 0; t < nsamp; t++ ) spectra_var[ t ] = 0.0;
 
 	// Find the BLN and try to flatten the input data per channel (remove non-stationary component).
@@ -1702,20 +1737,15 @@ int main()
   int nsamp = 491522/N;//10977282;
   int  nchans = 4096;
   unsigned long long in_buffer_bytes = nsamp * nchans * sizeof( unsigned short );
-  unsigned short *input_buffer = ( unsigned short* )malloc( in_buffer_bytes );
+  unsigned short *input_buffer = ( unsigned short* )safe_malloc( in_buffer_bytes );
 
   //Total Time of the application
   gettimeofday(&startReadTimer, NULL);
 	char fname[100] = "input_buffer.txt";
 
-//  nvtxRangePush("readInputBuffer");
+  PUSH_RANGE("readInputBuffer",8)
 	readInputBuffer(input_buffer, nsamp, nchans, fname);
-  //nvtxRangePop();
-
-//  Array2D<unisgned short> ip_2D(nsamp, nchans);
-//  for(int t = 0,i=0; t < nsamp; ++t,++i)
-//    for(int c = 0; c < nchans; ++c)
-//      ip_2D(t,c) = input_buffer[i];
+  POP_RANGE
 
   gettimeofday(&endReadTimer, NULL);
   double elapsedReadTimer = (endReadTimer.tv_sec - startReadTimer.tv_sec) + 1e-6 * (endReadTimer.tv_usec - startReadTimer.tv_usec);
