@@ -5,8 +5,14 @@ SHELL = /bin/sh
 #====================================================
 EXE = rfi.ex
 SRC = *.cpp
-
 CPP_OBJ = rfi.o
+
+
+#====================================================
+# Set compiler
+#====================================================
+COMP=pgi
+#COMP=intel
 
 #=========================================================
 # CUDA_PATH on summit, should be changed for other machines
@@ -18,7 +24,6 @@ ifeq ($(PRODUCTION),y)
 	DEFINE += -DPRODUCTION_VERSION
 endif
 
-
 #====================================================
 # Flag to set NVTX range marker
 #====================================================
@@ -26,17 +31,19 @@ ifeq ($(USE_NVTX),y)
 	DEFINE += -DUSE_NVTX
 endif
 
+CXXFLAGS = -O3 -std=c++11
+
 #====================================================
 # PGI compiler for OpenACC and CUDA compiler
 #====================================================
-COMP = pgi
+ifeq ($(COMP),pgi)
 CXX=pgc++
 CXX_CU=nvcc
 
 #====================================================
 # PGI compiler flags
 #====================================================
-CXXFLAGS = -g -O3 -fast -std=c++11 -lm
+CXXFLAGS = -fast -lm
 CXXFLAGS += -I /usr/local/cuda-10.1/include
 
 ifeq ($(OPENACC),y)
@@ -49,11 +56,18 @@ LDFLAGS = -acc -Mcuda -ta=tesla:cc60
 LDFLAGS += -lcurand
 CXXFLAGS += -Minfo=accel
 endif
+endif
 LDFLAGS += -L /usr/local/cuda-10.1/lib64/
 
 ifeq ($(USE_NVTX),y)
 LDFLAGS += -lnvToolsExt
 endif
+
+ifeq ($(COMP),intel)
+CXX=icc
+CXXFLAGS += -qopt-report=5
+endif
+
 
 CXXFLAGS += $(DEFINE)
 

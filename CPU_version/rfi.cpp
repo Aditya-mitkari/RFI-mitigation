@@ -116,7 +116,7 @@ inline void reduce_orig_mean(Array2D<float>& stage, int nsamp, int nchans, doubl
 #if(_OPENACC)
 #pragma acc parallel loop gang vector collapse(2)\
   present(stage) \
-  reduction(+:orig_mean_loc) async(1)
+  reduction(+:orig_mean_loc)
 #endif
   for(int t = 0; t < nsamp; ++t)
 	{
@@ -138,7 +138,7 @@ void reduce_orig_var(Array2D<float>& stage, int nsamp, int nchans, double orig_m
 #pragma acc parallel loop gang vector collapse(2)\
   copyin(orig_mean_loc) \
   present(stage) \
-  reduction(+:orig_var_loc) async(1)
+  reduction(+:orig_var_loc)
 #endif
   for(int t = 0; t < nsamp; ++t)
 	{
@@ -326,7 +326,9 @@ void channel_process(Array2D<char>& spectra_mask, Array2D<float>& stage, double 
 			}
   }
 
+#if(_OPENACC)
 #pragma acc exit data copyout(chan_mean[0:nchans], chan_var[0:nchans])
+#endif
 }
 
 void sample_process_V2(double *spectra_mean, Array2D<float>& stage, Array2D<char>& spectra_mask,
@@ -489,7 +491,7 @@ void update_input_buffer(int nsamp, int nchans, unsigned short *input_buffer, Ar
   }
 }
 
-void whileLoop_V2(Array2D<float>& stage, int *chan_mask, double *chan_mean, double *chan_var,
+void findNewMeanSD(Array2D<float>& stage, int *chan_mask, double *chan_mean, double *chan_var,
     int nsamp, int nchans, double& mean_rescale, double& var_rescale,
     float *random_chan_one, float *random_chan_two, double *spectra_mean,
     double *spectra_var, float *random_spectra_one, float *random_spectra_two )
@@ -753,128 +755,6 @@ void whileLoop_V2(Array2D<float>& stage, int *chan_mask, double *chan_mean, doub
 
 }
 
-void while_loop2(Array2D<float>& stage, int *spectra_mask, double *spectra_mean, double *spectra_var, int nsamp,
-    int nchans, float *random_spectra_one, float *random_spectra_two)
-{
-	float	sigma_cut	= 2.0f;
-	float clipping_constant = 0.0;
-
-	int finish = 0;
-	int rounds = 1;
-	int counter = 0;
-
-	int mean_of_mean = 0.0;
-	int var_of_mean  = 0.0;
-	int mean_of_var  = 0.0;
-	int var_of_var   = 0.0;
-
-	int old_mean_of_mean = 0.0;
-	int old_var_of_mean  = 0.0;
-	int old_mean_of_var  = 0.0;
-	int old_var_of_var   = 0.0;
-
-	for( int t = 0; t < (nsamp); t++ ) spectra_mask[ t ] = 1;
-	while( finish == 0 )
-	{
-		mean_of_mean = 0.0;
-		counter = 0;
-
-		for( int t = 0; t < (nsamp); t++ )
-		{
-			if( spectra_mask[ t ] == 1 )
-			{
-				mean_of_mean += spectra_mean[ t ];
-				counter++;
-			}
-		}
-
-		mean_of_mean /= counter;
-
-		var_of_mean = 0.0;
-		counter = 0;
-
-		for( int t = 0; t < (nsamp); t++ )
-		{
-			if( spectra_mask[ t ] == 1 )
-			{
-				var_of_mean += ( spectra_mean[ t ] - mean_of_mean ) * ( spectra_mean[ t ]- mean_of_mean );
-				counter++;
-			}
-		}
-
-		var_of_mean /= (counter);
-		var_of_mean = sqrt( var_of_mean );
-
-		mean_of_var = 0.0;
-		counter = 0;
-
-		for( int t = 0; t < (nsamp); t++ )
-		{
-			if( spectra_mask[ t ] == 1 )
-			{
-				mean_of_var += spectra_var[ t ];
-				counter++;
-			}
-		}
-
-		mean_of_var /= counter;
-
-		var_of_var = 0.0;
-		counter = 0;
-
-		for( int t = 0; t < (nsamp); t++ )
-		{
-			if( spectra_mask[ t ] == 1 )
-			{
-				var_of_var += ( spectra_var[ t ] - mean_of_var ) * ( spectra_var[ t ] - mean_of_var );
-				counter++;
-			}
-		}
-
-		var_of_var /= (counter);
-		var_of_var = sqrt( var_of_var );
-
-		for( int t = 0; t < (nsamp); t++) if( fabs( spectra_mean[ t ] - mean_of_mean ) / var_of_mean > sigma_cut || fabs( spectra_var[ t ] - mean_of_var ) / var_of_var > sigma_cut ) spectra_mask[ t ] = 0;
-
-		if(fabs(mean_of_mean - old_mean_of_mean)   < 0.001 &&
-		   fabs(var_of_mean  - old_var_of_mean )   < 0.001 &&
-		   fabs(mean_of_var  - old_mean_of_var )   < 0.001 &&
-		   fabs(var_of_var   - old_var_of_var  )   < 0.001)
-			 {
-				 finish = 1;
-			 }
-
-		old_mean_of_mean = mean_of_mean;
-		old_var_of_mean  = var_of_mean;
-		old_mean_of_var  = mean_of_var;
-		old_var_of_var   = var_of_var;
-
-		rounds++;
-	}
-
-	//printf("\n0 %lf %lf", mean_of_mean, var_of_mean);
-	//printf("\n0 %lf %lf", mean_of_var,  var_of_var);
-
-	for( int t = 0; t < nsamp; t++ ) clipping_constant += spectra_mask[ t ];
-	clipping_constant = ( nsamp - clipping_constant ) / nsamp;
-	clipping_constant = sqrt( -2.0 * log( clipping_constant * 2.506628275 ) );
-
-	// Perform spectral replacement
-	for( int t = 0; t < (nsamp); t++ )
-	{
-	    if( fabs( ( spectra_mean[ t ] - mean_of_mean ) / var_of_mean ) > clipping_constant && fabs( ( spectra_var[ t ] - mean_of_var ) / var_of_var ) > clipping_constant )
-			{
-				////printf("\nReplacing Spectral %d %lf %lf", t, spectra_mean[t], spectra_var[t]);
-				int perm_one = (int)( ( rand_local() / (float)RAND_MAX) * nchans );
-				for( int c = 0; c < nchans; c++ )
-				{
-					stage(t,c) = random_spectra_two[ ( c + perm_one ) % nchans ];
-				}
-     }
-	}
-
-}
-
 //Writing a transpose from stage to ip_buffer routine
 inline void transpose_stage_ip(Array2D<float>& stage, unsigned short *input_buffer, int nsamp, int nchans)
 {
@@ -950,8 +830,9 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   double Timer = (endRoutine.tv_sec - startRoutine.tv_sec) + 1e-6 * (endRoutine.tv_usec - startRoutine.tv_usec);
   routine_add_time += Timer;
   POP_RANGE
-
 //  cout << "Done with transpose_stage with T[secs] = " << Timer << endl;
+
+
 
   PUSH_RANGE("random_chan",2)
   gettimeofday(&startRoutine, NULL);
@@ -989,13 +870,6 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   POP_RANGE
 //  cout << "Done with sample process with T[secs] = " << Timer << endl;
 
-//  free(spectra_mask_t);
-#if(_OPENACC)
-#pragma acc exit data delete (spectra_mask, spectra_mask.dptr[0:spectra_mask.size])
-#endif
-
-  double mean_rescale = 0.0, var_rescale = 0.0;
-
   gettimeofday(&startRoutine, NULL);
   reduce_orig_mean(stage, nsamp, nchans, orig_mean);
   gettimeofday(&endRoutine, NULL);
@@ -1010,9 +884,16 @@ void rfi_debug3(int nsamp, int nchans, unsigned short *input_buffer, double& ela
   routine_add_time += Timer;
 //  cout << "Done with reduce_var with T[secs] = " << Timer << endl;
 
+//  free(spectra_mask_t);
+#if(_OPENACC)
+#pragma acc exit data delete (spectra_mask, spectra_mask.dptr[0:spectra_mask.size])
+#endif
+
+  double mean_rescale = 0.0, var_rescale = 0.0;
+
   PUSH_RANGE("whileLoop",6)
   gettimeofday(&startRoutine, NULL);
-  whileLoop_V2(stage, chan_mask, chan_mean, chan_var, nsamp, nchans, mean_rescale, var_rescale,
+  findNewMeanSD(stage, chan_mask, chan_mean, chan_var, nsamp, nchans, mean_rescale, var_rescale,
       random_chan_one, random_chan_two, spectra_mean, spectra_var,
       random_spectra_one, random_spectra_two);
   gettimeofday(&endRoutine, NULL);
@@ -1754,9 +1635,11 @@ int main()
 
   double elapsedRFITimer = 0.0;
   gettimeofday(&startRFITimer, NULL);
-//  rfi_debug(nsamp, nchans, &input_buffer, elapsedRFITimer);
+
+  //RFI - original code from aditya, which is a copy-paste of rfi.cu and has the best CPU time!!!
 //  rfi(nsamp, nchans,  &input_buffer, elapsedRFITimer);
 
+  //RFI debug version 3  - Rahul's modified code to make it faster on GPUs and gives right results with the original rfi
   rfi_debug3(nsamp, nchans,  input_buffer, elapsedRFITimer);
 
   //Write output in a different routine and then free the stage storage
